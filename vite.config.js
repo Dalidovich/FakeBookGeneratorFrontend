@@ -8,7 +8,7 @@ export default defineConfig({
     host: '0.0.0.0',
   },
   preview: {
-    allowedHosts: ['adminpanelfrontend-2xqk.onrender.com'],  
+    allowedHosts: ['fakebookgeneratorfrontend.onrender.com'],  
   },
   plugins: [react()],
   resolve: {
