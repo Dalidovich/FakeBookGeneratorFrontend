@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getFakeBooks } from '../utils/api/fakeBooks';
+import { getFakeBooks, getFakeComments } from '../utils/api/fakeBooks';
 import "../styles/books.css"
+import { debounce } from 'lodash';
 
 export const FakeBooksPage = () => {
   const [fakeBooks, setFakeBooks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [fakeComments, setFakeComments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
   const [page, setPage] = useState(0);
@@ -45,41 +48,52 @@ export const FakeBooksPage = () => {
       console.error(err);
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
   }, [language, avgLike, avgComments, seed, useSeed]);
 
-  useEffect(() => {
-    // Reset state when any filter changes
-    setFakeBooks([]);
-    setPage(0);
-    setHasMore(true);
-    fetchData(0);
-  }, [language, avgLike, avgComments, seed, useSeed, fetchData]);
+  // Debounced version of fetchData for filters
+  const debouncedFetchData = useCallback(debounce(fetchData, 500), [fetchData]);
 
   useEffect(() => {
-    // Load next page when page changes
+    // Load initial data
+    fetchData(0);
+  }, []);
+
+  useEffect(() => {
     if (page > 0) {
       fetchData(page);
     }
   }, [page, fetchData]);
 
+  useEffect(() => {
+    setPage(0);
+    setHasMore(true);
+    debouncedFetchData(0);
+    return () => debouncedFetchData.cancel();
+  }, [language, avgLike, avgComments, seed, useSeed, debouncedFetchData]);
+
   const lastBookElementRef = useCallback(node => {
-    if (loading) return;
+    if (loading || initialLoading) return;
     if (observer.current) observer.current.disconnect();
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
+      if (entries[0].isIntersecting && hasMore && !loading) {
         setPage(prevPage => prevPage + 1);
       }
     });
     if (node) observer.current.observe(node);
-  }, [loading, hasMore]);
+  }, [loading, hasMore, initialLoading]);
 
-  const toggleRow = (id) => {
+  const toggleRow = async (id,count) => {
+    const commentsResponse = await getFakeComments(id,count,language);
+    const commentsData = await commentsResponse.json();
+    setFakeComments(commentsData)
     setExpandedRow(expandedRow === id ? null : id);
   };
 
   const handleLanguageChange = (e) => {
     setLanguage(Number(e.target.value));
+    setExpandedRow(null);
   };
 
   const handleAvgLikeChange = (e) => {
@@ -90,18 +104,21 @@ export const FakeBooksPage = () => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value)) {
       setAvgComments(value);
+      setExpandedRow(null);
     }
   };
 
   const handleSeedChange = (e) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value)) {
-      setSeed(value);
+      setSeed(value);      
+      setExpandedRow(null);
     }
   };
 
   const handleUseSeedChange = (e) => {
     setUseSeed(e.target.checked);
+    setExpandedRow(null);
   };
 
   if (error) return <div className="error">{error}</div>;
@@ -216,7 +233,7 @@ export const FakeBooksPage = () => {
                   <>
                     <tr 
                       key={book.id} 
-                      onClick={() => toggleRow(book.id)}
+                      onClick={() => toggleRow(book.id,book.comments)}
                       style={{ cursor: 'pointer' }}
                       ref={index === fakeBooks.length - 1 ? lastBookElementRef : null}
                     >
@@ -255,6 +272,21 @@ export const FakeBooksPage = () => {
                                 <h4>Description</h4>
                                 <p>{book.description}</p>
                               </div>
+                                <div className="comments-container">
+                                  <h4 className="comments-title">Reader Comments ({fakeComments.length})</h4>
+                                  <div className="comments-grid">
+                                    {fakeComments.map((comment, index) => (
+                                      <div key={index} className="comment-card">
+                                        <div className="comment-header">
+                                          <span className="comment-author-badge">{comment.athor}</span>
+                                        </div>
+                                        <div className="comment-content">
+                                          <p>{comment.content}</p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
                             </div>
                           </div>
                         </td>
